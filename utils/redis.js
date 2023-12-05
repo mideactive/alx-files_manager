@@ -1,66 +1,80 @@
-import { createClient } from 'redis';
 import { promisify } from 'util';
+import redis from 'redis';
 
+/**
+ * Represents a Redis client.
+ */
 class RedisClient {
+  /**
+   * Creates a new RedisClient instance.
+   */
   constructor() {
-    this.client = createClient({ host: 'localhost', port: 6379 });
-
-    // Handle errors
-    this.client.on('error', (error) => {
-      console.error(`Redis client not connected to server: ${error}`);
+    this.client = redis.createClient();
+    this.client.on('error', (err) => {
+      console.error('Redis client failed to connect:', err.message || err.toString());
     });
   }
 
+  /**
+   * Checks if this client's connection to the Redis server is active.
+   * @returns {boolean}
+   */
   isAlive() {
     return this.client.connected;
   }
 
+  /**
+   * Retrieves the value of a given key.
+   * @param {String} key The key of the item to retrieve.
+   * @returns {String | Object}
+   */
   async get(key) {
+    // Check if the client is connected before performing the operation
     if (!this.isAlive()) {
-      console.error('Redis client is not connected');
-      return null;
+      throw new Error('Redis client is not connected');
     }
 
-    const getAsync = promisify(this.client.get).bind(this.client);
-    const value = await getAsync(key);
-    return value;
+    return promisify(this.client.GET).bind(this.client)(key);
   }
 
+  /**
+   * Stores a key and its value along with an expiration time.
+   * @param {String} key The key of the item to store.
+   * @param {String | Number | Boolean} value The item to store.
+   * @param {Number} duration The expiration time of the item in seconds.
+   * @returns {Promise<void>}
+   */
   async set(key, value, duration) {
+    // Check if the client is connected before performing the operation
     if (!this.isAlive()) {
-      console.error('Redis client is not connected');
-      return;
+      throw new Error('Redis client is not connected');
     }
 
-    const setAsync = promisify(this.client.set).bind(this.client);
-    await setAsync(key, value);
-    if (duration) {
-      this.client.expire(key, duration);
-    }
+    await promisify(this.client.SETEX).bind(this.client)(key, duration, value);
   }
 
+  /**
+   * Removes the value of a given key.
+   * @param {String} key The key of the item to remove.
+   * @returns {Promise<void>}
+   */
   async del(key) {
+    // Check if the client is connected before performing the operation
     if (!this.isAlive()) {
-      console.error('Redis client is not connected');
-      return;
+      throw new Error('Redis client is not connected');
     }
 
-    const delAsync = promisify(this.client.del).bind(this.client);
-    await delAsync(key);
+    await promisify(this.client.DEL).bind(this.client)(key);
   }
 
+  /**
+   * Closes the Redis client.
+   */
   close() {
-    // Gracefully close the Redis connection
-    this.client.quit((err) => {
-      if (err) {
-        console.error(`Error closing Redis connection: ${err}`);
-      } else {
-        console.log('Redis connection closed');
-      }
-    });
+    this.client.quit();
   }
 }
 
+// Export a single instance of the RedisClient
 const redisClient = new RedisClient();
-
 export default redisClient;
